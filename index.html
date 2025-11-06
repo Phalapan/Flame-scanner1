@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flare Detection System</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f0f0; }
+        #container { max-width: 640px; text-align: center; border: 1px solid #ccc; padding: 20px; border-radius: 10px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        video { width: 100%; border-radius: 5px; }
+        #status { font-size: 2.5em; font-weight: bold; margin: 20px 0; padding: 10px; border-radius: 5px; }
+        .safe { color: white; background-color: #28a745; }
+        .unsafe { color: white; background-color: #dc3545; }
+        canvas { border: 1px solid #ddd; width: 100%; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Flare Smoke & Flame Detection</h1>
+        <video id="video" autoplay playsinline></video>
+        <div id="status" class="safe">SAFE</div>
+        <h2>Detection Confidence</h2>
+        <canvas id="chart"></canvas>
+    </div>
+
+    <audio id="alarm-sound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const video = document.getElementById('video');
+        const statusDiv = document.getElementById('status');
+        const alarmSound = document.getElementById('alarm-sound');
+        const chartCanvas = document.getElementById('chart');
+
+        // Chart.js setup
+        const ctx = chartCanvas.getContext('2d');
+        const detectionChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Unsafe Confidence',
+                    data: [],
+                    borderColor: 'rgba(220, 53, 69, 1)',
+                    backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                    borderWidth: 1,
+                    fill: true,
+                }]
+            },
+            options: {
+                scales: {
+                    x: {
+                        display: false
+                    },
+                    y: {
+                        beginAtZero: true,
+                        max: 1
+                    }
+                },
+                animation: {
+                    duration: 200
+                }
+            }
+        });
+
+        function updateChart(value) {
+            const now = new Date();
+            const label = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+
+            detectionChart.data.labels.push(label);
+            detectionChart.data.datasets[0].data.push(value);
+
+            // Keep the chart to a fixed number of data points
+            if (detectionChart.data.labels.length > 30) {
+                detectionChart.data.labels.shift();
+                detectionChart.data.datasets[0].data.shift();
+            }
+            detectionChart.update();
+        }
+
+
+        // Access camera
+        async function setupCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Error accessing camera: ", err);
+                alert("Could not access the camera. Please allow camera access and refresh the page.");
+            }
+        }
+
+        // Analyze the current video frame
+        function detectFlare() {
+            if (video.readyState < 2) { // Don't run if video is not ready
+                return;
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            // Get pixel data from the canvas
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+
+            // Perform detection in the browser
+            const result = simulateDetection(imageData);
+
+            // Update the UI with the result
+            updateUI(result);
+        }
+
+        // SIMULATED DETECTION LOGIC (RUNS IN BROWSER) - IMPROVED ACCURACY
+        function simulateDetection(imageData) {
+            const data = imageData.data;
+            const width = imageData.width;
+            const height = imageData.height;
+
+            let firePixels = 0;
+            let smokePixels = 0;
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // --- Improved Fire Detection ---
+                // Looks for bright, highly saturated red/yellow colors.
+                // Red channel should be dominant and significantly brighter than blue.
+                // Green channel is present but less than red.
+                // This helps distinguish from skin tones which are less saturated.
+                if (r > 210 && g > 90 && g < 200 && b < 100 && (r - b > 100)) {
+                    firePixels++;
+                }
+
+                // --- Improved Smoke Detection ---
+                // Looks for pixels that are truly grey (R, G, and B values are close)
+                // and within a mid-range brightness.
+                const isGrey = Math.abs(r - g) < 25 && Math.abs(g - b) < 25 && Math.abs(r - b) < 25;
+                if (isGrey && r > 90 && r < 210) {
+                    smokePixels++;
+                }
+            }
+
+            const totalPixels = width * height;
+            const fireConfidence = (firePixels / totalPixels);
+            const smokeConfidence = (smokePixels / totalPixels);
+
+            let status = 'safe';
+            let confidence = 0;
+
+            // Increased threshold slightly to reduce sensitivity to noise
+            if (fireConfidence > 0.008 || smokeConfidence > 0.03) {
+                status = 'unsafe';
+                confidence = Math.min(1.0, Math.max(fireConfidence * 15, smokeConfidence * 3)); // Adjusted multiplier
+            } else {
+                confidence = Math.max(fireConfidence, smokeConfidence);
+            }
+
+            return { status, confidence };
+        }
+
+
+        // Update UI based on detection result
+        function updateUI(result) {
+            const confidence = result.confidence || 0;
+
+            if (result.status === 'unsafe') {
+                statusDiv.textContent = 'UNSAFE';
+                statusDiv.className = 'unsafe';
+                if (alarmSound.paused) {
+                    alarmSound.play().catch(e => console.error("Error playing sound:", e));
+                }
+            } else {
+                statusDiv.textContent = 'SAFE';
+                statusDiv.className = 'safe';
+                if (!alarmSound.paused) {
+                    alarmSound.pause();
+                    alarmSound.currentTime = 0;
+                }
+            }
+            // Update chart with the confidence score
+            updateChart(confidence);
+        }
+
+
+        window.addEventListener('load', async () => {
+            await setupCamera();
+            // Start detection loop after a short delay to allow the camera to initialize
+            video.onloadedmetadata = () => {
+                setInterval(detectFlare, 1000); // Send a frame every 1 second
+            };
+        });
+    </script>
+</body>
+</html>
