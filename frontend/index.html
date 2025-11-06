@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flare Detection System</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #f0f0f0; }
+        #container { max-width: 640px; text-align: center; border: 1px solid #ccc; padding: 20px; border-radius: 10px; background-color: #fff; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        video { width: 100%; border-radius: 5px; }
+        #status { font-size: 2.5em; font-weight: bold; margin: 20px 0; padding: 10px; border-radius: 5px; }
+        .safe { color: white; background-color: #28a745; }
+        .unsafe { color: white; background-color: #dc3545; }
+        canvas { border: 1px solid #ddd; width: 100%; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Flare Smoke & Flame Detection</h1>
+        <video id="video" autoplay playsinline></video>
+        <div id="status" class="safe">SAFE</div>
+        <h2>Detection Confidence</h2>
+        <canvas id="chart"></canvas>
+    </div>
+
+    <audio id="alarm-sound" src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" preload="auto"></audio>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
